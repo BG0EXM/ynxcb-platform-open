@@ -1,69 +1,120 @@
-# 伊宁县委宣传部部务工作平台 - 部署文档
+# 伊宁县委宣传部部务工作平台 - 部署文档（Nginx）
 
-服务器配置：Debian 13 (2C / 2G) · HTTPS 公网访问
+服务器配置：Debian (2C / 2G) · HTTPS 公网访问
 
-## 一、目录结构
+## 〇、系统由两部分组成
+
+部署到服务器需要**两样东西**：
+
+| 名称 | 说明 |
+|---|---|
+| `ynxcb-server` | 主程序（可执行文件） |
+| `static/` 文件夹 | 前端网页页面 |
+
+> **`ynxcb-server` 和 `static/` 必须放在同一个目录**（后端在运行目录下找 static）。
+> 本仓库的 `backend/static/` 已帮你准备好前端页面，直接用即可。
+
+## 一、部署后的目录结构
 
 ```
 /opt/ynxcb/
-├── ynxcb-server          # Go 编译后的二进制（含前端静态资源）
+├── ynxcb-server          # 主程序（可执行文件）
+├── static/               # 前端页面文件夹（与主程序同级）
 ├── config.json           # 配置文件
-├── data/
-│   ├── ynxcb.db          # SQLite 数据库
-│   └── uploads/          # 上传附件
-└── backup.sh             # 备份脚本
+├── backup.sh             # 备份脚本
+└── data/                 # 运行时自动生成（数据库/上传文件）
 ```
 
-## 二、部署步骤
+## 二、两种部署方式
 
-### 1. 上传并解压发布包
+### 方式 A：本地编译好后上传（推荐，最简单，服务器不用装环境）
+
+> 适合新手：在你自己电脑上编译一次，然后把两个东西传到服务器。
+
+**第 1 步：在电脑上编译**
+
+打开终端，进入项目 `backend` 目录：
 
 ```bash
-# 在服务器上执行
-mkdir -p /opt/ynxcb
-# 将 ynxcb-server（二进制）、config.json、backup.sh 上传到 /opt/ynxcb/
-cd /opt/ynxcb
-chmod +x ynxcb-server backup.sh
+cd backend
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ynxcb-server ./cmd/server
 ```
 
-### 2. 创建运行用户（安全加固）
+- Windows 装 Go：https://go.dev/dl
+- Linux 装 Go：`sudo apt install golang`
+- 实在不想装 Go，可以让已编译好的人给你一份 `ynxcb-server` 文件
+
+**第 2 步：上传到服务器**
+
+把这两样放进同一目录（如 `/opt/ynxcb/`）：
+- `ynxcb-server`（编译出的文件）
+- `static/`（用仓库 `backend/static/` 里的，整个文件夹复制）
+
+```bash
+# 在服务器上
+sudo mkdir -p /opt/ynxcb
+# 用 SFTP/SCP 上传 ynxcb-server 和 static/ 到 /opt/ynxcb/
+cd /opt/ynxcb
+sudo chmod +x ynxcb-server
+```
+
+**第 3 步：创建运行用户（安全加固，可跳过）**
 
 ```bash
 sudo useradd -r -s /usr/sbin/nologin ynxcb
 sudo chown -R ynxcb:ynxcb /opt/ynxcb
 ```
 
-### 3. 修改配置文件
-
-编辑 `/opt/ynxcb/config.json`：
-- `jwt.secret`：改为 64 位以上随机字符串（可用 `openssl rand -base64 48` 生成）
-- `admin.password`：设置初始管理员密码（首次登录后务必修改）
-- 如使用国内服务器无法访问外网，上传附件大小限制 `upload.max_mb` 可按需调整
-
-### 4. 配置 systemd 服务
+**第 4 步：配置 config.json**
 
 ```bash
-sudo cp /opt/ynxcb/ynxcb.service /etc/systemd/system/
+sudo cp /opt/ynxcb/config.json.example /opt/ynxcb/config.json
+sudo nano /opt/ynxcb/config.json
+```
+
+修改：
+- `jwt.secret`：改为随机长字符串（可用 `openssl rand -base64 48` 生成）
+- `admin.password`：设置初始管理员密码
+
+### 方式 B：在服务器上直接编译（懂行的用，服务器要装 Go）
+
+```bash
+# 1. 把整个项目源码传到服务器
+# 2. 编译
+cd backend
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ynxcb-server ./cmd/server
+# 3. 确保 static/ 和 ynxcb-server 同目录
+# 4. 后续步骤同方式 A 的第 3、4 步
+```
+
+---
+
+## 三、配置 systemd 服务（开机自启）
+
+```bash
+sudo cp /opt/ynxcb/deploy/systemd/ynxcb.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable ynxcb
-sudo systemctl start ynxcb
+sudo systemctl enable --now ynxcb
 sudo systemctl status ynxcb
 ```
 
-### 5. 反向代理 + HTTPS（Nginx）
+> 如果目录不是 `/opt/ynxcb`，需修改 `ynxcb.service` 里的路径。
 
-将 `../deploy/nginx/ynxcb.conf` 上传到 `/etc/nginx/sites-available/`，
-替换 `your-domain.com` 为你的域名，`/path/to/fullchain.pem` 和 `/path/to/privkey.pem`
-替换为你的证书路径（阿里云/腾讯云 SSL 或 Let's Encrypt）。
+## 四、反向代理 + HTTPS（Nginx）
+
+1. 把 `deploy/nginx/ynxcb.conf` 复制到服务器，修改域名和证书路径
+2. 启用：
 
 ```bash
-sudo cp ynxcb.conf /etc/nginx/sites-available/
+sudo cp /opt/ynxcb/deploy/nginx/ynxcb.conf /etc/nginx/sites-available/
 sudo ln -s /etc/nginx/sites-available/ynxcb.conf /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-### 6. 防火墙
+> 证书可用阿里云/腾讯云 SSL，或 Let's Encrypt（`certbot`）。
+
+## 五、防火墙
 
 ```bash
 sudo ufw allow 443/tcp
@@ -71,9 +122,9 @@ sudo ufw allow 80/tcp   # 用于证书续期
 sudo ufw enable
 ```
 
-后端 8080 端口无需对外开放（Nginx 内网反代）。
+> 后端 8080 端口无需对外开放（Nginx 内网反代）。
 
-## 三、数据备份
+## 六、数据备份
 
 ### 手动备份
 ```bash
@@ -87,54 +138,54 @@ sudo crontab -e
 0 2 * * * /opt/ynxcb/backup.sh >> /var/log/ynxcb-backup.log 2>&1
 ```
 
-备份文件保存在 `/opt/ynxcb-backup/`，默认保留 14 天。
-**重要**：请将备份目录定期同步到另一台机器或对象存储（如 rsync 到异机、上传 OSS）。
+备份文件在 `/opt/ynxcb-backup/`，保留 14 天。**建议定期同步到另一台机器或对象存储。**
 
 ### 恢复备份
 ```bash
-tar -xzf /opt/ynxcb-backup/ynxcb_20260804_020000.tar.gz -C /tmp/restore
+tar -xzf /opt/ynxcb-backup/ynxcb_xxx.tar.gz -C /tmp/restore
 sudo systemctl stop ynxcb
 sudo cp /tmp/restore/ynxcb_backup_*.db /opt/ynxcb/data/ynxcb.db
 sudo chown ynxcb:ynxcb /opt/ynxcb/data/ynxcb.db
 sudo systemctl start ynxcb
 ```
 
-## 四、日常维护
+## 七、日常维护
 
-### 查看日志
 ```bash
+# 查看日志
 sudo journalctl -u ynxcb -f
-```
 
-### 升级版本
-```bash
+# 升级版本（只替换主程序，static 不用动）
 sudo systemctl stop ynxcb
-# 上传新二进制覆盖 /opt/ynxcb/ynxcb-server
+# 上传新 ynxcb-server 覆盖 /opt/ynxcb/ynxcb-server
 sudo chmod +x /opt/ynxcb/ynxcb-server
 sudo systemctl start ynxcb
-```
 
-### 磁盘检查
-```bash
+# 磁盘检查
 df -h /opt/ynxcb
 du -sh /opt/ynxcb/data/uploads
 ```
 
-## 五、默认账号
+## 八、默认账号
 
-首次部署后用以下账号登录（**登录后立即修改密码**）：
-- 管理员：`admin` / config.json 中 `admin.password` 设置的密码
+首次部署后登录（**登录后立即修改密码**）：
+- 管理员：`admin` / `admin123`
 
-## 六、注意事项
+## 九、常见问题
 
-1. 平台使用 SQLite（WAL 模式），已优化为适合单机并发访问，勿在 NFS 等网络盘上运行数据库
+**页面 404 或空白？**
+- 99% 是 `static/` 文件夹没放对或没传
+- 确认服务器上 `ynxcb-server` 和 `static/` 在**同一目录**
+
+**升级后页面没变？**
+- 浏览器强刷（Ctrl+F5）
+
+## 十、注意事项
+
+1. 平台使用 SQLite（WAL 模式），勿在 NFS 等网络盘上运行数据库
 2. 上传附件默认限制 50MB，按需调整
-3. 服务器为 2C2G，已通过 systemd 内存限制（1G）防止 OOM，若并发量大可调优
+3. 2C2G 服务器已通过 systemd 内存限制（1G）防止 OOM
 
-## 七、无互联网（内网/隔离网）部署
+## 十一、无互联网（内网/隔离网）部署
 
-平台已完全本地化，**运行时不依赖任何在线资源**（无 CDN、无在线字体、无远程脚本、无外部 API）。
-
-- 在联网构建机上完成 `go build` 和 `npm run build`，将编译好的二进制 + `static/` 目录上传到内网服务器即可
-- 服务器全程无需联网，只开 80/443 端口
-- 详细排查说明与验证清单见 [OFFLINE-DEPLOYMENT.md](OFFLINE-DEPLOYMENT.md)
+平台运行时不依赖任何在线资源。在联网机器上完成编译后，把 `ynxcb-server` + `static/` 传到内网即可。详见 [OFFLINE-DEPLOYMENT.md](OFFLINE-DEPLOYMENT.md)。

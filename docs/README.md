@@ -37,7 +37,7 @@ ynxcb-platform/
     └── systemd/ynxcb.service
 ```
 
-> 全部文档集中在 `docs/` 目录：[README](README.md)（本项目）· [DEPLOY](DEPLOY.md)（部署）· [DEPLOY-WORDPRESS-COEXIST](DEPLOY-WORDPRESS-COEXIST.md)（WordPress 共存）· [OFFLINE-DEPLOYMENT](OFFLINE-DEPLOYMENT.md)（离线部署）· [ARCHITECTURE](ARCHITECTURE.md)（架构梳理）
+> 全部文档集中在 `docs/` 目录：[README](README.md)（本项目）· [DEPLOY](DEPLOY.md)（部署·Nginx）· [DEPLOY-CADDY](DEPLOY-CADDY.md)（部署·Caddy）· [DEPLOY-WORDPRESS-COEXIST](DEPLOY-WORDPRESS-COEXIST.md)（WordPress 共存）· [OFFLINE-DEPLOYMENT](OFFLINE-DEPLOYMENT.md)（离线部署）· [ARCHITECTURE](ARCHITECTURE.md)（架构梳理）
 
 ## 本地开发
 

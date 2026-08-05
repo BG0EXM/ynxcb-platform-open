@@ -10,6 +10,8 @@
 3. **用子域名隔离**：建议给平台单独一个子域名（如 `bw.yourdomain.com`），与 WordPress 主域名互不干扰
 4. **资源影响极小**：Go 进程约 30-60MB 内存，SQLite 无独立服务，对 WordPress 无感知
 
+> 平台由两部分组成：`ynxcb-server`（主程序）+ `static/` 文件夹（前端页面）。两者放在同一目录，`backend/static/` 已内置前端页面，直接用。
+
 ## 一、规划建议
 
 | 项 | 建议 | 说明 |
@@ -25,7 +27,7 @@
 
 ```bash
 sudo mkdir -p /opt/ynxcb
-# 上传 ynxcb-server（二进制）、config.json、backup.sh、ynxcb.service 到 /opt/ynxcb/
+# 上传 ynxcb-server（二进制）、static/（前端页面，用仓库 backend/static/）、config.json、backup.sh、ynxcb.service 到 /opt/ynxcb/
 cd /opt/ynxcb
 sudo chmod +x ynxcb-server backup.sh
 ```
@@ -148,4 +150,10 @@ sudo crontab -e
 
 ## 六、默认账号
 
-- 管理员：`admin` / config.json 中 `admin.password` 设置的密码（登录后立即修改）
+- 管理员：`admin` / `admin123`（登录后立即修改）
+
+## 七、常见问题
+
+**页面 404 或空白？**
+- 99% 是 `static/` 文件夹没放对或没传
+- 确认服务器上 `ynxcb-server` 和 `static/` 在**同一目录**
