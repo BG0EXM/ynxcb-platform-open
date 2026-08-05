@@ -85,7 +85,7 @@ func MarkAttendance(w http.ResponseWriter, r *http.Request) {
 	middleware.JSON(w, http.StatusOK, map[string]string{"message": "点到成功"})
 }
 
-// ListAttendances 考勤记录（管理员看全部，普通用户看自己）
+// ListAttendances 考勤记录（管理员看全部，普通用户看自己，分页）
 func ListAttendances(w http.ResponseWriter, r *http.Request) {
 	userID, _ := r.Context().Value(middleware.ContextUserID).(int64)
 	roleCode, _ := r.Context().Value(middleware.ContextRoleCode).(string)
@@ -94,26 +94,34 @@ func ListAttendances(w http.ResponseWriter, r *http.Request) {
 	month := r.URL.Query().Get("month")
 	userIDFilter := r.URL.Query().Get("user_id")
 
-	query := `SELECT a.id, a.user_id, u.real_name, a.attend_date, a.status, a.leave_type, a.remark, a.created_at, a.updated_at
-		FROM attendances a LEFT JOIN users u ON a.user_id = u.id WHERE 1=1`
+	where := ` WHERE 1=1`
 	args := []interface{}{}
 	if date != "" {
-		query += ` AND a.attend_date = ?`
+		where += ` AND a.attend_date = ?`
 		args = append(args, date)
 	}
 	if month != "" {
-		query += ` AND a.attend_date LIKE ?`
+		where += ` AND a.attend_date LIKE ?`
 		args = append(args, month+"%")
 	}
 	if roleCode != "admin" {
-		query += ` AND a.user_id = ?`
+		where += ` AND a.user_id = ?`
 		args = append(args, userID)
 	}
 	if userIDFilter != "" && roleCode == "admin" {
-		query += ` AND a.user_id = ?`
+		where += ` AND a.user_id = ?`
 		args = append(args, userIDFilter)
 	}
-	query += ` ORDER BY a.attend_date DESC, a.user_id`
+
+	p := parsePage(r)
+
+	var total int
+	database.DB.QueryRow("SELECT COUNT(*) FROM attendances a"+where, args...).Scan(&total)
+
+	query := `SELECT a.id, a.user_id, u.real_name, a.attend_date, a.status, a.leave_type, a.remark, a.created_at, a.updated_at
+		FROM attendances a LEFT JOIN users u ON a.user_id = u.id` + where +
+		` ORDER BY a.attend_date DESC, a.user_id LIMIT ? OFFSET ?`
+	args = append(args, p.PageSize, (p.Page-1)*p.PageSize)
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
@@ -128,7 +136,7 @@ func ListAttendances(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&a.ID, &a.UserID, &a.UserName, &a.AttendDate, &a.Status, &a.LeaveType, &a.Remark, &a.CreatedAt, &a.UpdatedAt)
 		list = append(list, a)
 	}
-	middleware.JSON(w, http.StatusOK, map[string]interface{}{"list": list})
+	middleware.JSON(w, http.StatusOK, paginateResult(list, total, p.Page, p.PageSize))
 }
 
 // AttendanceStats 考勤统计（指定日期，管理员用）
@@ -267,7 +275,7 @@ func CreateLeaveRecord(w http.ResponseWriter, r *http.Request) {
 	middleware.JSON(w, http.StatusOK, map[string]string{"message": "请假登记成功"})
 }
 
-// ListLeaveRecords 请假记录列表
+// ListLeaveRecords 请假记录列表（分页）
 func ListLeaveRecords(w http.ResponseWriter, r *http.Request) {
 	userID, _ := r.Context().Value(middleware.ContextUserID).(int64)
 	roleCode, _ := r.Context().Value(middleware.ContextRoleCode).(string)
@@ -275,22 +283,30 @@ func ListLeaveRecords(w http.ResponseWriter, r *http.Request) {
 	leaveType := r.URL.Query().Get("leave_type")
 	userIDFilter := r.URL.Query().Get("user_id")
 
-	query := `SELECT l.id, l.user_id, u.real_name, l.leave_type, l.start_date, l.end_date, l.days, l.reason, l.status, l.created_at, l.updated_at
-		FROM leave_records l LEFT JOIN users u ON l.user_id = u.id WHERE 1=1`
+	where := ` WHERE 1=1`
 	args := []interface{}{}
 	if leaveType != "" {
-		query += ` AND l.leave_type = ?`
+		where += ` AND l.leave_type = ?`
 		args = append(args, leaveType)
 	}
 	if roleCode != "admin" {
-		query += ` AND l.user_id = ?`
+		where += ` AND l.user_id = ?`
 		args = append(args, userID)
 	}
 	if userIDFilter != "" && roleCode == "admin" {
-		query += ` AND l.user_id = ?`
+		where += ` AND l.user_id = ?`
 		args = append(args, userIDFilter)
 	}
-	query += ` ORDER BY l.id DESC`
+
+	p := parsePage(r)
+
+	var total int
+	database.DB.QueryRow("SELECT COUNT(*) FROM leave_records l"+where, args...).Scan(&total)
+
+	query := `SELECT l.id, l.user_id, u.real_name, l.leave_type, l.start_date, l.end_date, l.days, l.reason, l.status, l.created_at, l.updated_at
+		FROM leave_records l LEFT JOIN users u ON l.user_id = u.id` + where +
+		` ORDER BY l.id DESC LIMIT ? OFFSET ?`
+	args = append(args, p.PageSize, (p.Page-1)*p.PageSize)
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
@@ -306,7 +322,7 @@ func ListLeaveRecords(w http.ResponseWriter, r *http.Request) {
 			&l.Days, &l.Reason, &l.Status, &l.CreatedAt, &l.UpdatedAt)
 		list = append(list, l)
 	}
-	middleware.JSON(w, http.StatusOK, map[string]interface{}{"list": list})
+	middleware.JSON(w, http.StatusOK, paginateResult(list, total, p.Page, p.PageSize))
 }
 
 // DeleteLeaveRecord 删除请假记录

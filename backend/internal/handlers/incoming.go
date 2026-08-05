@@ -11,7 +11,7 @@ import (
 	"ynxcb-platform/internal/models"
 )
 
-// ListIncomingDocs 收文列表
+// ListIncomingDocs 收文列表（分页）
 func ListIncomingDocs(w http.ResponseWriter, r *http.Request) {
 	keyword := r.URL.Query().Get("keyword")
 	status := r.URL.Query().Get("status")
@@ -20,38 +20,50 @@ func ListIncomingDocs(w http.ResponseWriter, r *http.Request) {
 	returned := r.URL.Query().Get("returned")
 	needReturn := r.URL.Query().Get("need_return")
 
-	query := `SELECT d.id, d.receive_no, d.received_date, d.from_unit, d.from_doc_no, d.doc_no, d.title,
-		d.copies, d.secret_level, d.urgency, d.suggest, d.leader_comment, d.processing,
-		d.return_date, d.returned, d.need_return,
-		d.registrar_id, u.real_name, d.status, d.created_at, d.updated_at
-		FROM incoming_docs d LEFT JOIN users u ON d.registrar_id = u.id WHERE 1=1`
+	// 构建 where 子句
+	where := ` WHERE 1=1`
 	args := []interface{}{}
 	if keyword != "" {
-		query += ` AND (d.title LIKE ? OR d.from_unit LIKE ? OR d.receive_no LIKE ? OR d.from_doc_no LIKE ? OR d.doc_no LIKE ?)`
+		where += ` AND (d.title LIKE ? OR d.from_unit LIKE ? OR d.receive_no LIKE ? OR d.from_doc_no LIKE ? OR d.doc_no LIKE ?)`
 		kw := "%" + keyword + "%"
 		args = append(args, kw, kw, kw, kw, kw)
 	}
 	if status != "" && status != "0" {
-		query += ` AND d.status = ?`
+		where += ` AND d.status = ?`
 		args = append(args, status)
 	}
 	if returned != "" && returned != "0" {
-		query += ` AND d.returned = ?`
+		where += ` AND d.returned = ?`
 		args = append(args, returned)
 	}
 	if needReturn != "" && needReturn != "0" {
-		query += ` AND d.need_return = ?`
+		where += ` AND d.need_return = ?`
 		args = append(args, needReturn)
 	}
 	if start != "" {
-		query += ` AND d.received_date >= ?`
+		where += ` AND d.received_date >= ?`
 		args = append(args, start)
 	}
 	if end != "" {
-		query += ` AND d.received_date <= ?`
+		where += ` AND d.received_date <= ?`
 		args = append(args, end)
 	}
-	query += ` ORDER BY d.id DESC`
+
+	// 分页
+	p := parsePage(r)
+
+	// 总数
+	var total int
+	database.DB.QueryRow("SELECT COUNT(*) FROM incoming_docs d"+where, args...).Scan(&total)
+
+	// 数据
+	query := `SELECT d.id, d.receive_no, d.received_date, d.from_unit, d.from_doc_no, d.doc_no, d.title,
+		d.copies, d.secret_level, d.urgency, d.suggest, d.leader_comment, d.processing,
+		d.return_date, d.returned, d.need_return,
+		d.registrar_id, u.real_name, d.status, d.created_at, d.updated_at
+		FROM incoming_docs d LEFT JOIN users u ON d.registrar_id = u.id` + where +
+		` ORDER BY d.id DESC LIMIT ? OFFSET ?`
+	args = append(args, p.PageSize, (p.Page-1)*p.PageSize)
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
@@ -69,7 +81,7 @@ func ListIncomingDocs(w http.ResponseWriter, r *http.Request) {
 			&d.RegistrarID, &d.Registrar, &d.Status, &d.CreatedAt, &d.UpdatedAt)
 		docs = append(docs, d)
 	}
-	middleware.JSON(w, http.StatusOK, map[string]interface{}{"list": docs})
+	middleware.JSON(w, http.StatusOK, paginateResult(docs, total, p.Page, p.PageSize))
 }
 
 // GetIncomingDoc 收文详情（含传阅记录）

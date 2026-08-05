@@ -9,24 +9,32 @@ import (
 	"ynxcb-platform/internal/models"
 )
 
-// ListContacts 通讯录
+// ListContacts 通讯录（分页）
 func ListContacts(w http.ResponseWriter, r *http.Request) {
 	keyword := r.URL.Query().Get("keyword")
 	departmentID := r.URL.Query().Get("department_id")
 
-	query := `SELECT c.id, c.name, c.phone, c.department_id, d.name, c.position, c.is_public, c.sort
-		FROM contacts c LEFT JOIN departments d ON c.department_id = d.id WHERE 1=1`
+	where := ` WHERE 1=1`
 	args := []interface{}{}
 	if keyword != "" {
-		query += ` AND (c.name LIKE ? OR c.position LIKE ? OR c.phone LIKE ?)`
+		where += ` AND (c.name LIKE ? OR c.position LIKE ? OR c.phone LIKE ?)`
 		kw := "%" + keyword + "%"
 		args = append(args, kw, kw, kw)
 	}
 	if departmentID != "" {
-		query += ` AND c.department_id = ?`
+		where += ` AND c.department_id = ?`
 		args = append(args, departmentID)
 	}
-	query += ` ORDER BY c.sort, c.id`
+
+	p := parsePage(r)
+
+	var total int
+	database.DB.QueryRow("SELECT COUNT(*) FROM contacts c"+where, args...).Scan(&total)
+
+	query := `SELECT c.id, c.name, c.phone, c.department_id, d.name, c.position, c.is_public, c.sort
+		FROM contacts c LEFT JOIN departments d ON c.department_id = d.id` + where +
+		` ORDER BY c.sort, c.id LIMIT ? OFFSET ?`
+	args = append(args, p.PageSize, (p.Page-1)*p.PageSize)
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
@@ -41,7 +49,7 @@ func ListContacts(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&c.ID, &c.Name, &c.Phone, &c.DepartmentID, &c.Department, &c.Position, &c.IsPublic, &c.Sort)
 		contacts = append(contacts, c)
 	}
-	middleware.JSON(w, http.StatusOK, map[string]interface{}{"list": contacts})
+	middleware.JSON(w, http.StatusOK, paginateResult(contacts, total, p.Page, p.PageSize))
 }
 
 // CreateContact 添加通讯录
@@ -177,30 +185,38 @@ func DeleteDutySchedule(w http.ResponseWriter, r *http.Request) {
 	middleware.JSON(w, http.StatusOK, map[string]string{"message": "删除成功"})
 }
 
-// ListReports 报表列表
+// ListReports 报表列表（分页）
 func ListReports(w http.ResponseWriter, r *http.Request) {
 	reportType := r.URL.Query().Get("report_type")
 	status := r.URL.Query().Get("status")
 	userID, _ := r.Context().Value(middleware.ContextUserID).(int64)
 	roleCode, _ := r.Context().Value(middleware.ContextRoleCode).(string)
 
-	query := `SELECT r.id, r.report_type, r.title, r.period, r.submitter_id, u.real_name, r.status, r.created_at, r.updated_at
-		FROM reports r LEFT JOIN users u ON r.submitter_id = u.id WHERE 1=1`
+	where := ` WHERE 1=1`
 	args := []interface{}{}
 	if reportType != "" {
-		query += ` AND r.report_type = ?`
+		where += ` AND r.report_type = ?`
 		args = append(args, reportType)
 	}
 	if status != "" {
-		query += ` AND r.status = ?`
+		where += ` AND r.status = ?`
 		args = append(args, status)
 	}
 	// 非管理员只看到自己提交的
 	if roleCode != "admin" {
-		query += ` AND r.submitter_id = ?`
+		where += ` AND r.submitter_id = ?`
 		args = append(args, userID)
 	}
-	query += ` ORDER BY r.id DESC`
+
+	p := parsePage(r)
+
+	var total int
+	database.DB.QueryRow("SELECT COUNT(*) FROM reports r"+where, args...).Scan(&total)
+
+	query := `SELECT r.id, r.report_type, r.title, r.period, r.submitter_id, u.real_name, r.status, r.created_at, r.updated_at
+		FROM reports r LEFT JOIN users u ON r.submitter_id = u.id` + where +
+		` ORDER BY r.id DESC LIMIT ? OFFSET ?`
+	args = append(args, p.PageSize, (p.Page-1)*p.PageSize)
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
@@ -216,7 +232,7 @@ func ListReports(w http.ResponseWriter, r *http.Request) {
 			&rep.Submitter, &rep.Status, &rep.CreatedAt, &rep.UpdatedAt)
 		reports = append(reports, rep)
 	}
-	middleware.JSON(w, http.StatusOK, map[string]interface{}{"list": reports})
+	middleware.JSON(w, http.StatusOK, paginateResult(reports, total, p.Page, p.PageSize))
 }
 
 // CreateReport 提交报表

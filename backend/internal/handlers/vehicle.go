@@ -147,7 +147,7 @@ func CreateVehicleApply(w http.ResponseWriter, r *http.Request) {
 	middleware.JSON(w, http.StatusOK, map[string]interface{}{"message": "报备成功", "id": id})
 }
 
-// ListVehicleApplies 用车报备列表
+// ListVehicleApplies 用车报备列表（分页）
 func ListVehicleApplies(w http.ResponseWriter, r *http.Request) {
 	userID, _ := r.Context().Value(middleware.ContextUserID).(int64)
 	roleCode, _ := r.Context().Value(middleware.ContextRoleCode).(string)
@@ -155,25 +155,32 @@ func ListVehicleApplies(w http.ResponseWriter, r *http.Request) {
 	date := r.URL.Query().Get("date")
 	mine := r.URL.Query().Get("mine")
 
+	where := ` WHERE 1=1`
+	args := []interface{}{}
+	if date != "" {
+		where += ` AND a.use_date = ?`
+		args = append(args, date)
+	}
+	if mine == "1" {
+		where += ` AND a.reporter_id = ?`
+		args = append(args, userID)
+	} else if roleCode != "admin" {
+		where += ` AND a.reporter_id = ?`
+		args = append(args, userID)
+	}
+
+	p := parsePage(r)
+
+	var total int
+	database.DB.QueryRow("SELECT COUNT(*) FROM vehicle_applies a"+where, args...).Scan(&total)
+
 	query := `SELECT a.id, a.vehicle_id, v.plate_no, v.brand, v.driver, a.reporter_id, u.real_name,
 		a.user_name, a.purpose, a.destination, a.use_date, a.use_time, a.passengers, a.created_at
 		FROM vehicle_applies a
 		LEFT JOIN vehicles v ON a.vehicle_id = v.id
-		LEFT JOIN users u ON a.reporter_id = u.id
-		WHERE 1=1`
-	args := []interface{}{}
-	if date != "" {
-		query += ` AND a.use_date = ?`
-		args = append(args, date)
-	}
-	if mine == "1" {
-		query += ` AND a.reporter_id = ?`
-		args = append(args, userID)
-	} else if roleCode != "admin" {
-		query += ` AND a.reporter_id = ?`
-		args = append(args, userID)
-	}
-	query += ` ORDER BY a.id DESC`
+		LEFT JOIN users u ON a.reporter_id = u.id` + where +
+		` ORDER BY a.id DESC LIMIT ? OFFSET ?`
+	args = append(args, p.PageSize, (p.Page-1)*p.PageSize)
 
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
@@ -202,7 +209,7 @@ func ListVehicleApplies(w http.ResponseWriter, r *http.Request) {
 		}
 		list = append(list, a)
 	}
-	middleware.JSON(w, http.StatusOK, map[string]interface{}{"list": list})
+	middleware.JSON(w, http.StatusOK, paginateResult(list, total, p.Page, p.PageSize))
 }
 
 // GetVehicleApply 报备详情（派车单用）

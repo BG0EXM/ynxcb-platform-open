@@ -109,8 +109,9 @@ type LoginRequest struct {
 
 // LoginResponse 登录响应
 type LoginResponse struct {
-	Token string `json:"token"`
-	User  User   `json:"user"`
+	Token      string `json:"token"`
+	User       User   `json:"user"`
+	MustChange bool   `json:"must_change"` // 是否需强制修改默认密码
 }
 
 // IncomingDoc 收文登记（上级来文）

@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"sync"
 	"time"
 
 	"ynxcb-platform/internal/auth"
@@ -12,6 +14,56 @@ import (
 	"ynxcb-platform/internal/middleware"
 	"ynxcb-platform/internal/models"
 )
+
+// 登录限流：每个用户名最多失败 5 次，锁定 10 分钟
+const (
+	maxLoginFails  = 5
+	lockDuration   = 10 * time.Minute
+)
+
+type loginFailCounter struct {
+	mu       sync.Mutex
+	fails    map[string]int
+	lockUntil map[string]time.Time
+}
+
+var loginLimiter = &loginFailCounter{
+	fails:     make(map[string]int),
+	lockUntil: make(map[string]time.Time),
+}
+
+// checkLoginLock 检查是否被锁定
+func (l *loginFailCounter) checkLocked(username string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if until, ok := l.lockUntil[username]; ok {
+		if time.Now().Before(until) {
+			return true
+		}
+		// 锁定过期，重置
+		delete(l.lockUntil, username)
+		delete(l.fails, username)
+	}
+	return false
+}
+
+// recordFail 记录失败
+func (l *loginFailCounter) recordFail(username string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.fails[username]++
+	if l.fails[username] >= maxLoginFails {
+		l.lockUntil[username] = time.Now().Add(lockDuration)
+	}
+}
+
+// recordSuccess 登录成功清除
+func (l *loginFailCounter) recordSuccess(username string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.fails, username)
+	delete(l.lockUntil, username)
+}
 
 // Login 用户登录
 func Login(cfg *config.Config) http.HandlerFunc {
@@ -23,6 +75,12 @@ func Login(cfg *config.Config) http.HandlerFunc {
 		}
 		if req.Username == "" || req.Password == "" {
 			middleware.JSON(w, http.StatusBadRequest, map[string]string{"error": "用户名和密码不能为空"})
+			return
+		}
+
+		// 登录限流：锁定检查
+		if loginLimiter.checkLocked(req.Username) {
+			middleware.JSON(w, http.StatusTooManyRequests, map[string]string{"error": "登录失败次数过多，账号已锁定，请10分钟后再试"})
 			return
 		}
 
@@ -38,6 +96,7 @@ func Login(cfg *config.Config) http.HandlerFunc {
 				&user.Status)
 
 		if err == sql.ErrNoRows {
+			loginLimiter.recordFail(req.Username)
 			middleware.JSON(w, http.StatusUnauthorized, map[string]string{"error": "用户名或密码错误"})
 			return
 		}
@@ -50,9 +109,13 @@ func Login(cfg *config.Config) http.HandlerFunc {
 			return
 		}
 		if !database.CheckPassword(user.PasswordHash, req.Password) {
+			loginLimiter.recordFail(req.Username)
 			middleware.JSON(w, http.StatusUnauthorized, map[string]string{"error": "用户名或密码错误"})
 			return
 		}
+
+		// 登录成功，清除失败记录
+		loginLimiter.recordSuccess(req.Username)
 
 		// 特殊：管理员首次登录使用配置的默认密码
 		if user.Username == cfg.Admin.Username && req.Password == cfg.Admin.Password {
@@ -72,6 +135,16 @@ func Login(cfg *config.Config) http.HandlerFunc {
 			User:  user,
 		}
 		resp.User.PasswordHash = ""
+
+		// 判断是否使用默认密码（需强制修改）
+		defaultPasswords := []string{"admin123", "123456"}
+		for _, dp := range defaultPasswords {
+			if req.Password == dp {
+				resp.MustChange = true
+				break
+			}
+		}
+
 		middleware.JSON(w, http.StatusOK, resp)
 	}
 }
@@ -170,10 +243,6 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	password := "123456" // 默认初始密码
-	if req.Username != "" {
-		// 允许自定义初始密码
-		// 这里简单起见使用默认 123456
-	}
 	hash, _ := database.HashPassword(password)
 	_, err := database.DB.Exec(
 		"INSERT INTO users (username, password_hash, real_name, phone, department_id, role_id, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -329,5 +398,34 @@ func resetAutoIncrement() {
 		// 将序列设为当前最大 ID（若表为空则为 0）
 		database.DB.Exec("DELETE FROM sqlite_sequence WHERE name=?", t)
 		database.DB.Exec("INSERT OR REPLACE INTO sqlite_sequence (name, seq) VALUES (?, (SELECT COALESCE(MAX(id),0) FROM "+t+"))", t)
+	}
+}
+
+// 分页参数
+type pageParam struct {
+	Page     int `json:"page"`
+	PageSize int `json:"page_size"`
+}
+
+// parsePage 解析分页参数，默认第1页，每页20条
+func parsePage(r *http.Request) pageParam {
+	page := 1
+	pageSize := 20
+	if p, err := strconv.Atoi(r.URL.Query().Get("page")); err == nil && p > 0 {
+		page = p
+	}
+	if ps, err := strconv.Atoi(r.URL.Query().Get("page_size")); err == nil && ps > 0 && ps <= 100 {
+		pageSize = ps
+	}
+	return pageParam{Page: page, PageSize: pageSize}
+}
+
+// paginateResult 构造分页返回结构
+func paginateResult(list interface{}, total, page, pageSize int) map[string]interface{} {
+	return map[string]interface{}{
+		"list":      list,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
 	}
 }
