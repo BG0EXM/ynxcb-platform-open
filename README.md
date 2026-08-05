@@ -80,10 +80,26 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ynxcb-server ./cmd/server
 
 ## 部署
 
-部署为 **主程序 + 静态资源目录** 结构，`backend/static/` 需随主程序一起部署（本仓库已内置）。
+系统由两部分组成，**都要放到服务器上**：
+1. **主程序** `ynxcb-server`（编译出的可执行文件）
+2. **前端页面** `backend/static/`（网页文件）
 
-- 方式一：直接使用仓库内的 `backend/static/`（推荐）
-- 方式二：在服务器上按上文「修改前端后重新构建」生成
+> 本仓库的 `backend/static/` **已经帮你准备好了前端页面**，直接使用即可，无需自己构建。
+
+**部署步骤（简版）**：
+
+```bash
+# 1. 把整个 backend 目录（含 static/）上传到服务器
+# 2. 编译主程序（或在别处编译好后上传）
+cd backend
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ynxcb-server ./cmd/server
+
+# 3. 运行
+./ynxcb-server -config config.json
+```
+
+**什么时候需要重新构建前端？**
+只有当你想**修改前端界面**（换背景图、改文案、改界面布局）时，才需要按上面的「修改前端后重新构建」用 `npm run build` 重新生成 `backend/static/`。不想改前端就完全不用管。
 
 完整部署见 [docs/DEPLOY.md](docs/DEPLOY.md)（Nginx）或 [docs/DEPLOY-CADDY.md](docs/DEPLOY-CADDY.md)（Caddy）。
 
