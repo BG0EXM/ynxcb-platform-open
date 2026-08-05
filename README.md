@@ -33,11 +33,13 @@
 
 ## 目录结构
 
+> 下面描述的是**源码仓库**的结构。部署到服务器时，只需取出「可执行文件 + static 文件夹」两样（见下方「部署」章节）。
+
 ```
 ├── backend/                 # Go 后端
 │   ├── cmd/server/          # 入口
 │   ├── internal/            # 后端业务代码（auth/config/database/handlers/...）
-│   └── static/              # 前端静态资源（本仓库已内置，开箱即用）
+│   └── static/              # 前端静态资源（部署时取出来，与主程序放一起）
 ├── frontend/                # Vue 前端源码
 │   └── src/
 │       ├── views/           # 各业务页面
@@ -82,24 +84,78 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ynxcb-server ./cmd/server
 
 系统由两部分组成，**都要放到服务器上**：
 1. **主程序** `ynxcb-server`（编译出的可执行文件）
-2. **前端页面** `backend/static/`（网页文件）
+2. **static 文件夹**（前端网页文件）
 
-> 本仓库的 `backend/static/` **已经帮你准备好了前端页面**，直接使用即可，无需自己构建。
+部署后服务器目录结构如下：
 
-**部署步骤（简版）**：
+```
+/opt/ynxcb/
+├── ynxcb-server        # 可执行文件
+├── static/             # 前端页面文件夹（与可执行文件同级）
+├── config.json         # 配置文件
+└── data/               # 运行时自动生成（数据库/上传文件）
+```
+
+**部署有两种方式，任选其一：**
+
+---
+
+### 方式一：本地编译好后上传（推荐，最简单，服务器不用装环境）
+
+> 适合小白，你只需要在自己电脑上做两步，然后把两个东西传到服务器。
+
+**第 1 步：在自己电脑上编译出可执行文件**
+
+在电脑上打开终端（命令行），进入项目 backend 目录：
 
 ```bash
-# 1. 把整个 backend 目录（含 static/）上传到服务器
-# 2. 编译主程序（或在别处编译好后上传）
 cd backend
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ynxcb-server ./cmd/server
+```
 
-# 3. 运行
+> 前提：电脑上装了 Go 语言环境。没装的话，看文末「常见问题」里的安装方法。
+> 如果你连 Go 都不想装，也可以找已编译好的 `ynxcb-server` 文件直接用。
+
+**第 2 步：把两个东西传到服务器**
+
+需要上传到服务器的就这两样（放进同一个目录，比如 `/opt/ynxcb/`）：
+
+| 文件/文件夹 | 说明 |
+|---|---|
+| `ynxcb-server` | 编译出的可执行文件 |
+| `static/` | 前端页面文件夹（用仓库 `backend/static/` 里的） |
+
+**第 3 步：在服务器上运行**
+
+```bash
+cd /opt/ynxcb
 ./ynxcb-server -config config.json
 ```
 
+> 用 systemd 托管可开机自启，见 `deploy/systemd/ynxcb.service`。
+
+---
+
+### 方式二：在服务器上直接编译（懂行的用，服务器要装 Go）
+
+> 适合在服务器上有 Go 环境、且把源码传到服务器的人。
+
+```bash
+# 1. 把整个项目源码上传到服务器（含 backend、frontend 等）
+# 2. 进入 backend 目录编译
+cd backend
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ynxcb-server ./cmd/server
+
+# 3. 把 static 文件夹放到与 ynxcb-server 同一目录，然后运行
+./ynxcb-server -config config.json
+```
+
+---
+
+> **关键点**：后端在**运行目录**下找 `static/` 文件夹，所以无论用哪种方式，`ynxcb-server` 和 `static/` 必须放在**同一目录**。仓库里的 `backend/static/` 已帮你准备好前端页面，直接把它作为服务器上的 `static/` 文件夹用即可。
+
 **什么时候需要重新构建前端？**
-只有当你想**修改前端界面**（换背景图、改文案、改界面布局）时，才需要按上面的「修改前端后重新构建」用 `npm run build` 重新生成 `backend/static/`。不想改前端就完全不用管。
+只有当你想**修改前端界面**（换背景图、改文案、改界面布局）时，才需要用 `npm run build` 重新生成 `static/` 文件夹。不想改前端就完全不用管。
 
 完整部署见 [docs/DEPLOY.md](docs/DEPLOY.md)（Nginx）或 [docs/DEPLOY-CADDY.md](docs/DEPLOY-CADDY.md)（Caddy）。
 
@@ -110,6 +166,27 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ynxcb-server ./cmd/server
 - **乡镇/通讯员（reporter）**：投稿、接收通知、上报材料
 
 > 收文的新增/编辑/删除仅限"办公室"部门用户，其他部门只读。
+
+## 常见问题
+
+**Q1：电脑没装 Go，怎么编译？**
+- Windows：去 https://go.dev/dl 下载安装包，装完重启终端
+- Linux：`sudo apt install golang`
+- 如果实在不想装 Go，可以让已编译好的人给你一份 `ynxcb-server` 文件直接上传
+
+**Q2：`CGO_ENABLED=0 GOOS=linux GOARCH=amd64` 是什么？**
+- 表示"编译出 Linux 64 位系统能运行的程序"（不管你在 Windows 还是 Mac 上编译）
+- 照抄这行命令即可，不用理解每个参数
+
+**Q3：上传到哪里？**
+- 可执行文件和 static 文件夹放**同一个目录**，建议 `/opt/ynxcb/`
+
+**Q4：static 文件夹哪来的？**
+- 直接用仓库里的 `backend/static/` 文件夹，整文件夹复制到服务器
+
+**Q5：页面打开是 404 或空白？**
+- 99% 是 static 文件夹没放对位置或没传上去
+- 确认服务器上 `ynxcb-server` 和 `static/` 在**同一目录**
 
 ## 默认账号
 
