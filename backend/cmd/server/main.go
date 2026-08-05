@@ -56,18 +56,26 @@ func main() {
 	}
 }
 
-// applyAdmin 用配置的管理员信息更新默认管理员
+// applyAdmin 用配置的管理员信息创建/更新管理员账号
+// 密码非空即生效，用户名缺省时使用默认 admin，方便通过 config.json 修改管理员密码
 func applyAdmin(cfg *config.Config) {
-	if cfg.Admin.Username == "" || cfg.Admin.Username == "admin" {
+	if cfg.Admin.Password == "" {
 		return
 	}
-	// 仅当配置的管理员用户名不是默认 admin 时，创建/更新该账号
-	hash, _ := database.HashPassword(cfg.Admin.Password)
-	_, err := database.DB.Exec(
+	username := cfg.Admin.Username
+	if username == "" {
+		username = "admin"
+	}
+	hash, err := database.HashPassword(cfg.Admin.Password)
+	if err != nil {
+		log.Printf("加密管理员密码失败: %v", err)
+		return
+	}
+	_, err = database.DB.Exec(
 		`INSERT INTO users (username, password_hash, real_name, phone, department_id, role_id, status)
 		 VALUES (?, ?, '系统管理员', '', 1, 1, 1)
 		 ON CONFLICT(username) DO UPDATE SET password_hash = ?`,
-		cfg.Admin.Username, hash, hash)
+		username, hash, hash)
 	if err != nil {
 		log.Printf("配置管理员账号失败: %v", err)
 	}
