@@ -3,17 +3,17 @@
     "port": "8080"
   },
   "database": {
-    "path": "data/ynxcb.db"
+    "path": "/opt/ynxcb/data/ynxcb.db"
   },
   "jwt": {
-    "secret": "PLEASE-CHANGE-THIS-TO-A-LONG-RANDOM-STRING-AT-LEAST-64-CHARACTERS"
+    "secret": "PLEASE-CHANGE-THIS-TO-A-LONG-RANDOM-STRING-64-CHARACTERS-MINIMUM"
   },
   "upload": {
-    "dir": "data/uploads",
+    "dir": "/opt/ynxcb/data/uploads",
     "max_mb": 50
   },
   "admin": {
     "username": "admin",
-    "password": "admin123"
+    "password": "ChangeMe_2026"
   }
 }
