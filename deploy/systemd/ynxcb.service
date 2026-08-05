@@ -1,0 +1,23 @@
+[Unit]
+Description=伊宁县委宣传部部务工作平台
+After=network.target
+
+[Service]
+Type=simple
+User=ynxcb
+Group=ynxcb
+WorkingDirectory=/opt/ynxcb
+ExecStart=/opt/ynxcb/ynxcb-server -config /opt/ynxcb/config.json
+Restart=always
+RestartSec=5
+# 安全加固
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/ynxcb/data
+# 资源限制（2C2G 服务器）
+MemoryMax=1G
+MemoryHigh=768M
+
+[Install]
+WantedBy=multi-user.target

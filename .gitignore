@@ -1,0 +1,19 @@
+# 编译产物（不提交，由各部署者构建）
+backend/ynxcb-server
+backend/config.json
+backend/data/
+frontend/node_modules/
+frontend/dist/
+*.log
+
+# 说明：backend/static 为前端构建产物，本仓库已内置（开箱即用），
+# 若自行修改前端，可重新构建覆盖；是否提交由维护者决定。
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 系统文件
+.DS_Store
+Thumbs.db

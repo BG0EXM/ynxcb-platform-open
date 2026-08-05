@@ -1,0 +1,19 @@
+{
+  "server": {
+    "port": "8080"
+  },
+  "database": {
+    "path": "data/ynxcb.db"
+  },
+  "jwt": {
+    "secret": "PLEASE-CHANGE-THIS-TO-A-LONG-RANDOM-STRING-AT-LEAST-64-CHARACTERS"
+  },
+  "upload": {
+    "dir": "data/uploads",
+    "max_mb": 50
+  },
+  "admin": {
+    "username": "admin",
+    "password": "admin123"
+  }
+}
