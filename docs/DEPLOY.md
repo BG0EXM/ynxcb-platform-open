@@ -74,7 +74,9 @@ sudo nano /opt/ynxcb/config.json
 
 修改：
 - `jwt.secret`：改为随机长字符串（可用 `openssl rand -base64 48` 生成）
-- `admin.password`：设置初始管理员密码
+- `admin.username` / `admin.password`：设置管理员账号。**只要 `admin.password` 非空，程序每次启动都会用 config 中的用户名和密码覆盖管理员账号**，改完重启即生效（默认 `admin` / `admin123`）
+
+> `data/` 目录无需手动创建，systemd 服务会在启动前自动创建并设置权限。
 
 ### 方式 B：在服务器上直接编译（懂行的用，服务器要装 Go）
 
