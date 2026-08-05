@@ -40,7 +40,7 @@
           <span class="label-val">{{ doc.from_unit || '—' }}</span>
         </div>
         <div class="label-title">{{ doc.title || '' }}</div>
-        <div class="label-platform">伊宁县委宣传部部务工作平台 V1.0</div>
+        <div class="label-platform">伊宁县委宣传部部务工作平台 V1.2</div>
       </div>
     </div>
   </div>

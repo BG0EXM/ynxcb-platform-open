@@ -124,6 +124,12 @@ router.beforeEach((to, from, next) => {
   } else if (to.path === '/login' && token) {
     next('/dashboard')
   } else {
+    // 强制改密拦截：未修改默认密码前只能访问个人中心
+    const mustChange = localStorage.getItem('must_change') === '1'
+    if (mustChange && to.path !== '/profile') {
+      next('/profile')
+      return
+    }
     if (to.meta.admin) {
       const user = JSON.parse(localStorage.getItem('user') || '{}')
       if (user.role_code !== 'admin') {

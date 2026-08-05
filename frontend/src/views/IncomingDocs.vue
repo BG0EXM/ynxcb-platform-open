@@ -306,7 +306,13 @@ const save = async () => {
     }
     dialogVisible.value = false
     loadData()
+    emitIncomingChanged()
   } catch (e) {}
+}
+
+// 通知顶栏刷新待办数
+const emitIncomingChanged = () => {
+  window.dispatchEvent(new Event('incoming-changed'))
 }
 
 const openDetail = async (row) => {
@@ -344,6 +350,7 @@ const remove = async (row) => {
     await request.delete(`/incoming-docs/${row.id}`)
     ElMessage.success('删除成功')
     loadData()
+    emitIncomingChanged()
   } catch (e) {}
 }
 

@@ -17,7 +17,7 @@
       <el-table :data="list" stripe v-loading="loading" empty-text="暂无联系人">
         <el-table-column prop="name" label="姓名" width="110" />
         <el-table-column prop="position" label="职务" width="150" />
-        <el-table-column prop="department" label="部门" width="140" />
+        <el-table-column prop="department_name" label="部门" width="140" />
         <el-table-column prop="phone" label="电话" width="150" />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">

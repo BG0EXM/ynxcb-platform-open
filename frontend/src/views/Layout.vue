@@ -90,7 +90,6 @@ const menus = computed(() => {
 const currentTitle = computed(() => route.meta.title || '')
 
 const unread = ref(0)
-let timer = null
 
 const loadUnread = async () => {
   try {
@@ -99,11 +98,18 @@ const loadUnread = async () => {
   } catch (e) {}
 }
 
+const refreshUnread = () => {
+  loadUnread()
+}
+
 onMounted(() => {
   loadUnread()
-  timer = setInterval(loadUnread, 60000)
+  // 事件驱动刷新：收文操作后触发
+  window.addEventListener('incoming-changed', refreshUnread)
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => {
+  window.removeEventListener('incoming-changed', refreshUnread)
+})
 
 const avatarText = computed(() => {
   const name = authStore.user?.real_name || '用户'

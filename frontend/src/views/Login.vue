@@ -53,9 +53,14 @@ const handleLogin = async () => {
   await formRef.value.validate()
   loading.value = true
   try {
-    await authStore.login(form.username, form.password)
-    ElMessage.success('登录成功')
-    router.push('/dashboard')
+    const res = await authStore.login(form.username, form.password)
+    if (res.must_change) {
+      ElMessage.warning('您正在使用默认密码，请先修改密码')
+      router.push('/profile')
+    } else {
+      ElMessage.success('登录成功')
+      router.push('/dashboard')
+    }
   } catch (e) {
     // 错误已由拦截器提示
   } finally {

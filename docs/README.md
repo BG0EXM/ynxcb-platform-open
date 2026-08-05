@@ -83,9 +83,11 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ynxcb-server ./cmd/server
 
 ## 角色与权限
 
-- 管理员（admin）：全部功能 + 用户管理
+- 管理员（admin）：全部功能 + 用户管理，**报表审阅**
 - 科室工作人员（staff）：业务办理
 - 乡镇/通讯员（reporter）：投稿、接收通知、上报材料
+
+> 收文的新增/编辑/删除仅限"办公室"部门用户，其他部门只读；报表审阅仅管理员，普通用户只能提交/查看自己的报表。
 
 ## 部署
 
